@@ -5,32 +5,59 @@ Code and Datasets for the manuscript of  "A novel entropy-based approach for spe
 ## Requirements
 
 anndata==0.10.2
+
 annotated-types==0.6.0
+
 GraphST==1.1.1
+
 igraph==0.10.8
+
 ipython==8.23.0
+
 louvain==0.8.1
+
 matplotlib==3.8.0
+
 matplotlib-inline==0.1.6
+
 networkx==3.2
+
 numba==0.58.1
+
 numpy==1.23.2
+
 opencv-python==4.8.1.78
+
 pandas==2.0.3
+
 Pillow==9.5.0
+
 python-igraph==0.10.8
+
 python-louvain==0.16
+
 scanpy==1.9.5
+
 scikit-learn==1.3.2
+
 scipy==1.11.3
+
 seaborn==0.13.0
+
 sklearn==0.0.post10
+
 SpaGCN==1.2.7
+
 STAGATE-pyG==1.0.0
+
 stlearn==0.4.12
+
 torch==2.1.0+cu118
+
 torchtoolbox==0.1.8.2
+
 torchvision==0.16.0+cu118
+
 
 
 
