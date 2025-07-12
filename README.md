@@ -116,3 +116,17 @@ torchtoolbox==0.1.8.2
 We outline the workflow of our approach for stabilization and selection of the appropriate resolution, which is suitable for a series of spatial clustering methods based on graph networks. We take the SpaGCN method as an example. Due to inherent randomness, SpaGCN generates different results with varying random seeds. First, we evaluate the amount of clustering information contained in the results based on the clarity of the clustering. Next, for each selected random result, we calculate the similarity degree between pairs of sample points. Finally, we fuse the similarity matrices and determine an appropriate resolution parameter using the cluster-entropy-based selection strategy. Then we can obtain stable clustering results using the Louvain algorithm with the selected resolution parameter.
 
 For similar methods other than SpaGCN, such as GraphST and STAGATE, the above strategy can't be used due to the differences in the implementations of the Louvain algorithm. However, the cluster entropy derived from the SpaGCN clustering results can still serve as a reasonable reference for these methods. Therefore, we are able to determine the appropriate resolution parameter for these methods. 
+
+
+
+## Datasets
+
+For DLPFC dataset, see [http://spatial.libd.org/spatialLIBD](http://spatial.libd.org/spatialLIBD).
+
+
+
+For Stereo-seq mouse embryo dataset, see [https://db.cngb.org/stomics/mosta](https://db.cngb.org/stomics/mosta/).
+
+
+
+For other datasets, see "Datasets" folder.
