@@ -1,15 +1,22 @@
-
 import numpy as np
 import os
 import numba
 import pandas as pd
 import time
 
+PROJECT_ROOT = "/Data/Programs/SpaGCN_stabilization/stabilization_part/"
+DATASET_ROOT = "/Data/Datasets/"
+
+FUSION_RESOLUTIONS = [round(float(res), 3) for res in np.linspace(1.0, 1.2, 201)]
+FUSION_FILE_PREFIX = "asw100_fusion_Euclid_median"
+
 def initialization_load_adata(index):
 
-    result_dir = "/Data/Programs/"+index + "_first100/"
-    base_dir =  "/Data/Programs"+index+ "/"
+    result_dir = PROJECT_ROOT + index + "/first100/"
+    base_dir = PROJECT_ROOT + index + "/1000results/"
 
+    os.makedirs(result_dir, exist_ok=True)
+    os.makedirs(base_dir, exist_ok=True)
     return result_dir,base_dir
 
 
@@ -58,7 +65,7 @@ def calculate_median_matrix(idx_list,base_dir,result_dir):
 	del Euclid_matrix
 
 	print("Euclid_matrix median calculation is done!")
-	np.savetxt(result_dir +  'asw100_fusion_Euclid_median.txt',Euclid_matrix_median,delimiter=',')
+	np.savetxt(result_dir + FUSION_FILE_PREFIX + '.txt', Euclid_matrix_median, delimiter=',')
 
 
 # Louvain
@@ -68,60 +75,61 @@ import multiprocessing
 
 
 def initialization_louvain(index):
-    base_dir = "/Data/Programs/" + index  + "_first100/"
-    result_dir = base_dir + "louvain_result/"
+    base_dir = PROJECT_ROOT + index + "/first100/"
+    result_dir = base_dir + "louvain_results/"
     if not os.path.exists(result_dir):
         os.makedirs(result_dir)
 
-    res_list = np.linspace(1.0, 1.2, 201)
-    suffix = "_Euclid_median"
-    weight = np.loadtxt(base_dir + 'asw100_fusion' + suffix + '.txt', delimiter=',')
+    res_list = FUSION_RESOLUTIONS
+    prefix = FUSION_FILE_PREFIX
+    weight = np.loadtxt(base_dir + prefix + '.txt', delimiter=',')
     weight = np.exp(-1 * weight)
     G = nx.from_numpy_array(weight)
-    return base_dir, result_dir, res_list, suffix, G
+    return base_dir, result_dir, res_list, prefix, G
 
 
-def louvain_batch(batch, base_dir, result_dir, res_list, suffix, G):
-    for res in res_list[batch * 20:(batch + 1) * 20]:
+def louvain_batch(batch, base_dir, result_dir, res_list, prefix, G):
+    for res in res_list:
         res = round(res, 3)
 
         time_start = time.time()
 
         partition1 = community_louvain.best_partition(G, resolution=res)
         result = pd.DataFrame({'index': list(partition1.keys()), 'cluster': list(partition1.values())})
-        result.to_csv(result_dir + 'asw100_fusion' + suffix + '_res' + str(res) + '.csv', index=False)
+        result.to_csv(result_dir + prefix + '_res' + str(res) + '.csv', index=False)
 
         del partition1
         time_end = time.time()
 
-        print('The time cost of louvain part of', suffix, "and res", res, 'is', time_end - time_start)
+        print('The time cost of louvain part of', prefix, "and res", res, 'is', time_end - time_start)
 
     print("batch", batch, "end")
 
 
 def main_louvain(index):
-	base_dir, result_dir, res_list, suffix, G = initialization_louvain(index)
+	base_dir, result_dir, res_list, prefix, G = initialization_louvain(index)
 	pool2 = multiprocessing.Pool(processes=10)
-	for batch in range(10):
-		pool2.apply_async(louvain_batch, (batch, base_dir, result_dir, res_list, suffix, G))
+	for batch, batch_res_list in enumerate(np.array_split(res_list, 10)):
+		pool2.apply_async(louvain_batch, (batch, base_dir, result_dir, batch_res_list, prefix, G))
 	pool2.close()
 	pool2.join()
-	print(index + "is finished,end")
+	print(index + " is finished")
 
 def main():
-	for index in ["151507","151508","151509","151510","151669","151670","151671","151672","151673","151674","151675","151676"]:
+	for index in ["MERFISH_0.04","MERFISH_0.09","MERFISH_0.14","MERFISH_0.19","MERFISH_0.24",
+              "E9.5_E1S1.MOSTA","E9.5_E2S1.MOSTA","E9.5_E2S2.MOSTA","E9.5_E2S3.MOSTA","E9.5_E2S4.MOSTA",
+              "151507", "151508", "151509", "151510", "151669", "151670","151671", "151672", "151673", "151674", "151675","151676",
+              "Slice_1","Slice_2","Slice_3","BZ5","BZ14","BZ97","STARmap_BY3_1k"]:
 
 		result_dir,base_dir = initialization_load_adata(index)
 		idx_list = get_first100_index(result_dir)
 		calculate_median_matrix(idx_list,base_dir,result_dir)
 
-	for index in ["151507","151508","151509","151510","151669","151670","151671","151672","151673","151674","151675","151676"]:
+	for index in ["MERFISH_0.04","MERFISH_0.09","MERFISH_0.14","MERFISH_0.19","MERFISH_0.24",
+              "E9.5_E1S1.MOSTA","E9.5_E2S1.MOSTA","E9.5_E2S2.MOSTA","E9.5_E2S3.MOSTA","E9.5_E2S4.MOSTA",
+              "151507", "151508", "151509", "151510", "151669", "151670","151671", "151672", "151673", "151674", "151675","151676",
+              "Slice_1","Slice_2","Slice_3","BZ5","BZ14","BZ97","STARmap_BY3_1k"]:
 		main_louvain(index)
 
 if __name__ == "__main__":
 	main()
-
-
-
-
-

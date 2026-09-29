@@ -1,4 +1,3 @@
-
 import pandas as pd
 import numpy as np
 import scanpy as sc
@@ -19,6 +18,9 @@ from torch.nn.parameter import Parameter
 from torch.nn.modules.module import Module
 import time
 import os
+
+PROJECT_ROOT = "/Data/Programs/SpaGCN_stabilization/stabilization_part/"
+DATASET_ROOT = "/Data/Datasets/"
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
@@ -59,9 +61,9 @@ def prefilter_specialgenes(adata,Gene1Pattern="ERCC",Gene2Pattern="MT-"):
 def calculate_adj_matrix(x, y, x_pixel=None, y_pixel=None, image=None, beta=49, alpha=1, histology=True):
     #x,y,x_pixel, y_pixel are lists
     if histology:
-        assert (x_pixel is not None) & (x_pixel is not None) & (image is not None)
+        assert (x_pixel is not None) & (y_pixel is not None) & (image is not None)
         assert (len(x)==len(x_pixel)) & (len(y)==len(y_pixel))
-        print("Calculateing adj matrix using histology image...")
+        print("Calculating adj matrix using histology image...")
         #beta to control the range of neighbourhood when calculate grey vale for one spot
         #alpha to control the color scale
         beta_half=round(beta/2)
@@ -88,7 +90,7 @@ def calculate_adj_matrix(x, y, x_pixel=None, y_pixel=None, image=None, beta=49, 
         print("Var of x,y,z = ", np.var(x),np.var(y),np.var(z))
         X=np.array([x, y, z]).T.astype(np.float32)
     else:
-        print("Calculateing adj matrix using xy only...")
+        print("Calculating adj matrix using xy only...")
         X=np.array([x, y]).T.astype(np.float32)
     return pairwise_distance(X)
 
@@ -169,14 +171,14 @@ class GraphConvolution(Module):
 class simple_GC_DEC(nn.Module):
     def __init__(self, nfeat, nhid, alpha=0.2):
         super(simple_GC_DEC, self).__init__()
-        self.gc = GraphConvolution(nfeat, nhid).cuda()
+        self.gc = GraphConvolution(nfeat, nhid).to(device)
         self.nhid = nhid
         # self.mu determined by the init method
         self.alpha = alpha
 
     def forward(self, x, adj):
         x = self.gc(x, adj)
-        q = 1.0 / ((1.0 + torch.sum((x.unsqueeze(1) - self.mu.cuda()) ** 2, dim=2) / self.alpha) + 1e-8)
+        q = 1.0 / ((1.0 + torch.sum((x.unsqueeze(1) - self.mu.to(device)) ** 2, dim=2) / self.alpha) + 1e-8)
         q = q ** ((self.alpha + 1.0) / 2.0)
         q = q / torch.sum(q, dim=1, keepdim=True)
         return x, q
@@ -210,7 +212,7 @@ class simple_GC_DEC(nn.Module):
             kmeans = KMeans(self.n_clusters, n_init=20)
             if init_spa:
                 # ------Kmeans use exp and spatial
-                y_pred = kmeans.fit_predict(features.detach().numpy())
+                y_pred = kmeans.fit_predict(features.detach().cpu().numpy())
             else:
                 # ------Kmeans only use exp info, no spatial
                 y_pred = kmeans.fit_predict(X)  # Here we use X as numpy
@@ -269,7 +271,7 @@ class simple_GC_DEC(nn.Module):
         X = torch.DoubleTensor(X)
         adj = torch.DoubleTensor(adj)
         features, _ = self.forward(X, adj)
-        features = pd.DataFrame(features.detach().numpy(), index=np.arange(0, features.shape[0]))
+        features = pd.DataFrame(features.detach().cpu().numpy(), index=np.arange(0, features.shape[0]))
         Group = pd.Series(init_y, index=np.arange(0, features.shape[0]), name="Group")
         Mergefeature = pd.concat([features, Group], axis=1)
         cluster_centers = np.asarray(Mergefeature.groupby("Group").mean())
@@ -332,12 +334,12 @@ class SpaGCN(object):
 
         ###------------------------------------------###
         if self.l is None:
-            raise ValueError('l should not be set before fitting the model!')
+            raise ValueError('l must be set before fitting the model!')
         adj_exp=torch.exp(-1*(adj**2)/(2*(self.l**2)))
-        embed = torch.DoubleTensor(embed).cuda()
+        embed = torch.DoubleTensor(embed).to(device)
         #----------Train model----------
 
-        self.model=simple_GC_DEC(embed.shape[1],embed.shape[1]).cuda()
+        self.model=simple_GC_DEC(embed.shape[1],embed.shape[1]).to(device)
         self.model.fit(embed,adj_exp,lr=self.lr,max_epochs=self.max_epochs,weight_decay=self.weight_decay,opt=self.opt,init_spa=self.init_spa,init=self.init,n_neighbors=self.n_neighbors,n_clusters=self.n_clusters,res=self.res, tol=self.tol)
         self.embed=embed
         self.adj_exp=adj_exp
@@ -359,7 +361,7 @@ def refine(sample_id, pred, dis, shape="hexagon"):
     elif shape=="square":
         num_nbs=4
     else:
-        print("Shape not recongized, shape='hexagon' for Visium data, 'square' for ST data.")
+        raise ValueError("Shape not recognized; use 'hexagon' for Visium data or 'square' for ST data.")
     for i in range(len(sample_id)):
         index=sample_id[i]
         dis_tmp=dis_df.loc[index, :].sort_values()
@@ -375,8 +377,8 @@ def refine(sample_id, pred, dis, shape="hexagon"):
 
 def initialization(index):
     #SpatialLIBD
-    dataset_dir = "/Data/SpatialLIBD/" + index + "/"
-    result_dir = "/Data/Programs/" + index + "/"
+    dataset_dir = DATASET_ROOT + "SpatialLIBD/" + index + "/"
+    result_dir = PROJECT_ROOT + index + "/1000results/"
     if not os.path.exists(result_dir):
         os.makedirs(result_dir)
 
@@ -393,6 +395,40 @@ def initialization(index):
     x_array = adata.obs["x_array"].tolist()
     y_array = adata.obs["y_array"].tolist()
 
+
+#Stereo_seq
+    # dataset_dir = "/Data/Datasets/Stereo_seq/" +  "/"
+    # result_dir = PROJECT_ROOT + index + "/1000results/"
+    # if not os.path.exists(result_dir):
+    #     os.makedirs(result_dir)
+    # adata = sc.read_h5ad(dataset_dir + index + ".h5ad")
+
+    #Barista_seq
+    # dataset_dir = "/Data/Datasets/BARISTAseq/mouse_primary_visual_cortex/"
+    # result_dir = PROJECT_ROOT + index + "/1000results/"
+    # if not os.path.exists(result_dir):
+    #     os.makedirs(result_dir)
+    # adata = sc.read_h5ad(dataset_dir + index + ".h5ad")
+    # print(adata)
+
+    #MERFISH
+    # dataset_dir = "/Data/Datasets/MERFISH/"
+    # result_dir = PROJECT_ROOT + index + "/1000results/"
+    # if not os.path.exists(result_dir):
+    #     os.makedirs(result_dir)
+    # adata = sc.read_h5ad(dataset_dir + index + ".h5ad")
+    # print(adata)
+
+    #STARmap
+    # dataset_dir = "/Data/Datasets/STARmap/"
+    # result_dir = PROJECT_ROOT + index + "/1000results/"
+    # if not os.path.exists(result_dir):
+    #     os.makedirs(result_dir)
+    # adata = sc.read_h5ad(dataset_dir + index + ".h5ad")
+    # print(adata)
+
+
+
     # normalization
     adata.var_names_make_unique()
     prefilter_genes(adata, min_cells=3)  # avoiding all genes are zeros
@@ -400,6 +436,7 @@ def initialization(index):
     # Normalize and take log for UMI
     sc.pp.normalize_per_cell(adata)
     sc.pp.log1p(adata)
+    adata.write_h5ad(dataset_dir + "processed_adata.h5ad")
 
     print("data preprocess completed")
 
@@ -428,7 +465,7 @@ def initialization(index):
 
 
 
-def single_experiment(adata,adj,l,adj_2d,seed,result_dir,res=0.7):
+def single_experiment(adata,embed,adj,l,adj_2d,seed,result_dir,res=0.7):
     r_seed = t_seed = n_seed = seed
     res = res
 
@@ -440,8 +477,8 @@ def single_experiment(adata,adj,l,adj_2d,seed,result_dir,res=0.7):
     torch.manual_seed(t_seed)
     np.random.seed(n_seed)
     # Run
-    adj = torch.from_numpy(adj).double().cuda()
-    clf.train(adata, adj, init_spa=True, init="louvain", res=res, tol=5e-3, lr=0.05, max_epochs=200)
+    adj = torch.from_numpy(adj).double().to(device)
+    clf.train(embed, adj, init_spa=True, init="louvain", res=res, tol=5e-3, lr=0.05, max_epochs=200)
     y_pred, prob = clf.predict()
     adata.obs["pred"]= y_pred
     adata.obs["pred"]=adata.obs["pred"].astype('category')
@@ -484,7 +521,7 @@ def single_experiment(adata,adj,l,adj_2d,seed,result_dir,res=0.7):
 def multiple_experiments(index,adata,adj,l,result_dir,embed,res=0.7):
     random.seed(100)
     random_list = random.sample(range(1, 100000), 1000)
-    adj = torch.from_numpy(adj).double().cuda()
+    adj = torch.from_numpy(adj).double().to(device)
 
     print("start")
     for i in range(0,1000):
@@ -508,7 +545,7 @@ def multiple_experiments(index,adata,adj,l,result_dir,embed,res=0.7):
         #Run
         clf.train(embed,adj,init_spa=True,init="louvain",res=res, tol=5e-3, lr=0.05, max_epochs=200)
         y_pred, prob=clf.predict()
-        mu = clf.model.mu.detach().numpy()
+        mu = clf.model.mu.detach().cpu().numpy()
 
         np.savetxt(result_dir + str(i+1) + '_y_pred.txt', y_pred, fmt='%f', delimiter=',')
         np.savetxt(result_dir + str(i+1) + '_prob.txt', prob, fmt='%f', delimiter=',')
@@ -520,12 +557,13 @@ def multiple_experiments(index,adata,adj,l,result_dir,embed,res=0.7):
 def main():
     for index in ["151507","151508","151509","151510","151669","151670","151671","151672","151673","151674","151675","151676"]:
         os.environ["CUDA_VISIBLE_DEVICES"] = "0"
+
+#for index in ["Slice_1","Slice_2","Slice_3"]:
+#for index in ["MERFISH_0.04","MERFISH_0.09","MERFISH_0.14","MERFISH_0.19","MERFISH_0.24"]:
+#for index in ["BZ5","BZ14","BZ97","STARmap_BY3_1k"]:
+#for index in ["E9.5_E1S1.MOSTA","E9.5_E2S1.MOSTA","E9.5_E2S2.MOSTA","E9.5_E2S3.MOSTA","E9.5_E2S4.MOSTA"]:
         dataset_dir,result_dir,adata,x_pixel,y_pixel,adj,l,adj_2d,embed = initialization(index)
         multiple_experiments(index,adata,adj,l,result_dir,embed,res=0.7)
 
 if __name__ == "__main__":
     main()
-
-
-
-
