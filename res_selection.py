@@ -53,8 +53,18 @@ def compute_entropy_contributions(sizes: List[int], total: int) -> Tuple[List[fl
 
 
 def compute_effective_clusters(sizes: List[int], total: int) -> int:
-    """Determine the effective number of clusters using the 5 percent entropy rule."""
-    entropies, _ = compute_entropy_contributions(sizes, total)
+    """Determine the effective number of clusters using the 5 percent entropy rule.
+
+    Each cluster's entropy contribution is normalized by the total entropy so
+    that the contributions sum to 1. Consequently, the 0.05 thresholds are
+    interpreted as 5 percent of the total cluster entropy, and the remaining
+    entropy is simply 1 - cumulative.
+    """
+    entropies, total_entropy = compute_entropy_contributions(sizes, total)
+    if total_entropy <= 0:
+        # A single-cluster (zero-entropy) result has no effective substructure.
+        return 0
+    entropies = [e / total_entropy for e in entropies]
     n_clusters = len(sizes)
     cumulative = 0.0
     effective = 0
